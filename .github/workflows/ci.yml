@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby: [3.4]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+
+      - name: Start docker services
+        run: docker compose up -d
+
+      - name: Wait for DynamoDB Local readiness
+        run: |
+          set -euo pipefail
+          export AWS_ACCESS_KEY_ID=dummy
+          export AWS_SECRET_ACCESS_KEY=dummy
+          export AWS_DEFAULT_REGION=eu-central-1
+          ready=false
+          for attempt in {1..60}; do
+            if aws dynamodb list-tables --endpoint-url http://localhost:8011 --region eu-central-1 >/dev/null 2>&1; then
+              echo "DynamoDB Local is ready"
+              ready=true
+              break
+            fi
+            echo "DynamoDB not ready yet (attempt ${attempt}/60)"
+            sleep 2
+          done
+          if [ "${ready}" = false ]; then
+            echo "DynamoDB Local did not become ready in time" >&2
+            docker compose logs --no-color dynamodb-local | tail -n 200 || true
+            exit 1
+          fi
+
+      - name: Wait for MinIO readiness
+        run: |
+          set -euo pipefail
+          export AWS_ACCESS_KEY_ID=minioadmin
+          export AWS_SECRET_ACCESS_KEY=minioadmin
+          export AWS_DEFAULT_REGION=eu-central-1
+          endpoint="http://localhost:9010"
+          ready=false
+          for attempt in {1..60}; do
+            if aws --endpoint-url "${endpoint}" s3 ls >/dev/null 2>&1; then
+              echo "MinIO is ready"
+              ready=true
+              break
+            fi
+            echo "Waiting for MinIO (attempt ${attempt}/60)"
+            sleep 2
+          done
+          if [ "${ready}" = false ]; then
+            echo "MinIO did not become ready in time" >&2
+            docker compose logs --no-color minio | tail -n 200 || true
+            exit 1
+          fi
+
+      - name: Wait for tinyproxy readiness
+        run: |
+          set -euo pipefail
+          ready=false
+          for attempt in {1..60}; do
+            if nc -z 127.0.0.1 8888 >/dev/null 2>&1; then
+              echo "tinyproxy is ready"
+              ready=true
+              break
+            fi
+            echo "Waiting for tinyproxy (attempt ${attempt}/60)"
+            sleep 2
+          done
+          if [ "${ready}" = false ]; then
+            echo "tinyproxy did not become ready in time" >&2
+            docker compose logs --no-color tinyproxy | tail -n 200 || true
+            exit 1
+          fi
+
+      - name: Wait for toxiproxy readiness
+        run: |
+          set -euo pipefail
+          ready=false
+          for attempt in {1..60}; do
+            if curl -sf http://localhost:8474/version >/dev/null 2>&1; then
+              echo "toxiproxy is ready"
+              ready=true
+              break
+            fi
+            echo "Waiting for toxiproxy (attempt ${attempt}/60)"
+            sleep 2
+          done
+          if [ "${ready}" = false ]; then
+            echo "toxiproxy did not become ready in time" >&2
+            docker compose logs --no-color toxiproxy | tail -n 200 || true
+            exit 1
+          fi
+
+      - name: CI
+        run: AWS_SDK_HTTP_ASYNC_DOCKER_STARTED=1 bin/ci
+
+      - name: Stop docker services
+        if: always()
+        run: docker compose down
