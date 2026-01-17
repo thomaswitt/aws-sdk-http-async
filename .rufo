@@ -1,0 +1,4 @@
+quote_style :single
+trailing_commas true
+align_chained_calls false
+excludes ['tmp/**/*', 'vendor/**/*', 'pkg/**/*']

@@ -1,0 +1,70 @@
+# docker-compose.yml
+
+name: aws-sdk-http-async
+
+services:
+  dynamodb-local:
+    image: "amazon/dynamodb-local:latest"
+    container_name: dynamodb-local-8011
+    entrypoint:
+      - "bash"
+      - "-c"
+      - |
+        set -euo pipefail
+        port="$${DYNAMODB_PORT:-8011}"
+        exec java -jar DynamoDBLocal.jar -sharedDb -disableTelemetry -inMemory -port "$${port}"
+    environment:
+      - AWS_ACCESS_KEY_ID=dummy
+      - AWS_SECRET_ACCESS_KEY=dummy
+      - AWS_DEFAULT_REGION=eu-central-1
+    ports:
+      - "8011:8011"
+    working_dir: /home/dynamodblocal
+    ulimits:
+      nofile:
+        soft: "65536"
+        hard: "65536"
+
+    healthcheck:
+      test: ["CMD", "aws", "dynamodb", "list-tables", "--endpoint-url", "http://localhost:8011"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  minio:
+    image: minio/minio:latest
+    container_name: minio-local-9010
+    restart: always
+    ports:
+      - "9010:9010"
+      - "9011:9011"
+    entrypoint: minio server /data --address ":9010" --console-address ":9011"
+
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "curl -sf http://localhost:9010/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  tinyproxy:
+    image: kalaksi/tinyproxy:latest
+    container_name: tinyproxy-8888
+    restart: always
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./spec/support/tinyproxy.conf:/etc/tinyproxy/tinyproxy.conf:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:latest
+    container_name: toxiproxy-8080
+    restart: always
+    ports:
+      - "8474:8474"
+      - "8080:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

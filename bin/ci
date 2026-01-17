@@ -1,0 +1,146 @@
+#!/usr/bin/env ruby
+
+require 'net/http'
+require 'open3'
+require 'socket'
+
+class CIRunner
+  def initialize
+    @steps = []
+    @failed = false
+  end
+
+  def step(name, command)
+    @steps << { name:, command: }
+  end
+
+  def run
+    puts "Running CI checks...\n\n"
+    start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+    @steps.each do |step|
+      run_step(step[:name], step[:command])
+      break if @failed
+    end
+
+    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
+    puts "\n#{'=' * 60}"
+    if @failed
+      puts "CI FAILED after #{elapsed.round(2)}s"
+      exit 1
+    else
+      puts "CI PASSED in #{elapsed.round(2)}s"
+    end
+  end
+
+  private
+
+  def run_step(name, command)
+    print "#{name}... "
+    $stdout.flush
+    start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    stdout, stderr, status = Open3.capture3(command)
+    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start
+
+    if status.success?
+      puts "OK (#{elapsed.round(2)}s)"
+    else
+      puts "FAILED (#{elapsed.round(2)}s)"
+      puts "\n#{'-' * 60}"
+      puts "Command: #{command}"
+      puts "STDOUT:\n#{stdout}" unless stdout.empty?
+      puts "STDERR:\n#{stderr}" unless stderr.empty?
+      puts '-' * 60
+      @failed = true
+    end
+  end
+end
+
+def docker_compose_available?
+  system('docker', 'compose', 'version', out: File::NULL, err: File::NULL)
+end
+
+def wait_for_service(name, attempts: 60, delay: 2)
+  attempts.times do |attempt|
+    ready = begin
+        yield
+      rescue StandardError
+        false
+      end
+
+    if ready
+      puts "#{name} is ready"
+      return true
+    end
+
+    puts "Waiting for #{name} (attempt #{attempt + 1}/#{attempts})"
+    sleep delay
+  end
+  false
+end
+
+ci = CIRunner.new
+ci.step 'Bundle check', 'bundle check'
+ci.step 'Style: Rufo', 'bundle exec rake rufo:check'
+ci.step 'Style: RuboCop', 'bundle exec rubocop --format simple'
+if File.exist?('config/application.rb')
+  ci.step 'Security: Brakeman code analysis',
+    'bundle exec brakeman --rails8 --run-all-checks --quiet --no-pager --no-summary -i .brakeman-ignore.json'
+else
+  ci.step 'Security: Brakeman code analysis', 'echo "Brakeman skipped (no Rails app)"'
+end
+
+docker_enabled = docker_compose_available? && File.exist?('docker-compose.yml')
+docker_services_started = false
+if docker_enabled
+  if ENV['AWS_SDK_HTTP_ASYNC_DOCKER_STARTED'] != '1'
+    puts 'Starting docker services...'
+    system('docker', 'compose', 'up', '-d', '--force-recreate') || exit(1)
+    docker_services_started = true
+  end
+
+  at_exit do
+    next unless docker_services_started
+
+    system('docker', 'compose', 'down')
+  end
+
+  dynamodb_uri = URI('http://localhost:8011')
+  unless wait_for_service('DynamoDB Local') do
+    Net::HTTP.start(dynamodb_uri.host, dynamodb_uri.port) { |http| http.head('/') }
+    true
+  end
+    warn 'DynamoDB Local did not become ready in time'
+    exit 1
+  end
+
+  minio_uri = URI('http://localhost:9010/minio/health/live')
+  unless wait_for_service('MinIO') do
+    Net::HTTP.get_response(minio_uri).is_a?(Net::HTTPSuccess)
+  end
+    warn 'MinIO did not become ready in time'
+    exit 1
+  end
+
+  unless wait_for_service('tinyproxy') do
+    socket = TCPSocket.new('127.0.0.1', 8888)
+    socket.close
+    true
+  end
+    warn 'tinyproxy did not become ready in time'
+    exit 1
+  end
+
+  toxiproxy_uri = URI('http://localhost:8474/version')
+  unless wait_for_service('toxiproxy') do
+    Net::HTTP.get_response(toxiproxy_uri).is_a?(Net::HTTPSuccess)
+  end
+    warn 'toxiproxy did not become ready in time'
+    exit 1
+  end
+end
+
+ci.step 'Tests: RSpec', "bundle exec rspec --tag '~docker'"
+ci.step 'Tests: Docker integration', 'bundle exec rspec --tag docker' if docker_enabled
+ci.step 'Security: Bundler audit', 'bundle exec bundle-audit check --update'
+ci.run

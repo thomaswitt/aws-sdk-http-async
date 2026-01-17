@@ -1,0 +1,100 @@
+# .rubocop.yml
+
+inherit_gem:
+  rubocop-rails-omakase: rubocop.yml
+
+plugins:
+  - rubocop-rake
+  - rubocop-rspec
+
+AllCops:
+  NewCops: enable
+  TargetRubyVersion: 3.4
+  Exclude:
+    - '**/*.json'
+    - 'tmp/**/*'
+    - 'vendor/**/*'
+    - 'pkg/**/*'
+
+# ============================================================================
+# STYLE COPS - Ruby code style (alphabetical)
+# Note: rubocop-rails-omakase disables Style department; we enable specific cops
+# ============================================================================
+
+# Hashes with symbol keys use Ruby 1.9+ syntax with shorthand `{ name:, email: }`
+Style/HashSyntax:
+  Enabled: true
+  EnforcedShorthandSyntax: always
+
+# Prefer Ruby 3.4 `it` block parameter over explicit `{ |x| x.foo }`
+Style/ItBlockParameter:
+  Enabled: true
+
+Lint/ItWithoutArgumentsInBlock:
+  Enabled: false
+
+# Prefer single quotes for non-interpolated strings
+Style/StringLiterals:
+  Enabled: true
+  EnforcedStyle: single_quotes
+  Include:
+    - 'Gemfile'
+    - '**/*.rb'
+    - '**/*.rake'
+
+Style/TrailingCommaInHashLiteral:
+  Enabled: true
+  EnforcedStyleForMultiline: diff_comma
+
+Style/TrailingCommaInArrayLiteral:
+  Enabled: true
+  EnforcedStyleForMultiline: diff_comma
+
+# ============================================================================
+# LAYOUT COPS - Formatting and whitespace
+# Disabled: We rely on `rake formatter` for formatting. These cops conflict.
+# ============================================================================
+
+Layout/ElseAlignment:
+  Enabled: false
+
+Layout/EndAlignment:
+  Enabled: false
+
+Layout/MultilineMethodCallIndentation:
+  Enabled: false
+
+Layout/MultilineOperationIndentation:
+  Enabled: false
+
+# No spaces inside array brackets: [1, 2, 3] not [ 1, 2, 3 ]
+Layout/SpaceInsideArrayLiteralBrackets:
+  EnforcedStyle: no_space
+
+Layout/TrailingEmptyLines:
+  Enabled: false
+
+# ============================================================================
+# RSpec - pragmatic exceptions (minimal set to keep specs readable)
+# ============================================================================
+
+RSpec/DescribeClass:
+  Enabled: false
+
+RSpec/LeakyConstantDeclaration:
+  Enabled: false
+
+RSpec/ExampleLength:
+  Enabled: false
+
+RSpec/MultipleExpectations:
+  Enabled: false
+
+RSpec/SpecFilePathFormat:
+  Enabled: false
+
+RSpec/InstanceVariable:
+  Enabled: false
+
+RSpec/RemoveConst:
+  Enabled: false

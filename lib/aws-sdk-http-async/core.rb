@@ -1,0 +1,10 @@
+require 'async'
+require 'async/http'
+require 'aws-sdk-core'
+
+require 'async/aws/version'
+require 'async/aws/errors'
+require 'async/aws/client_cache'
+require 'async/aws/handler'
+require 'async/aws/http_plugin'
+require 'async/aws/patcher'
