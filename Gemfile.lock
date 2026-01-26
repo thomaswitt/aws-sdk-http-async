@@ -24,13 +24,13 @@ GEM
     addressable (2.8.8)
       public_suffix (>= 2.0.2, < 8.0)
     ast (2.4.3)
-    async (2.35.3)
+    async (2.36.0)
       console (~> 1.29)
       fiber-annotation
       io-event (~> 1.11)
       metrics (~> 0.12)
       traces (~> 0.18)
-    async-http (0.94.0)
+    async-http (0.94.2)
       async (>= 2.10.2)
       async-pool (~> 0.11)
       io-endpoint (~> 0.14)
@@ -90,7 +90,7 @@ GEM
     hashdiff (1.2.1)
     i18n (1.14.8)
       concurrent-ruby (~> 1.0)
-    io-endpoint (0.16.0)
+    io-endpoint (0.17.0)
     io-event (1.14.2)
     io-stream (0.11.1)
     jmespath (1.6.2)
@@ -107,8 +107,8 @@ GEM
       racc
     prism (1.8.0)
     protocol-hpack (1.5.1)
-    protocol-http (0.58.0)
-    protocol-http1 (0.36.0)
+    protocol-http (0.58.1)
+    protocol-http1 (0.37.0)
       protocol-http (~> 0.58)
     protocol-http2 (0.24.0)
       protocol-hpack (~> 1.4)
@@ -207,8 +207,8 @@ CHECKSUMS
   activesupport (8.1.2) sha256=88842578ccd0d40f658289b0e8c842acfe9af751afee2e0744a7873f50b6fdae
   addressable (2.8.8) sha256=7c13b8f9536cf6364c03b9d417c19986019e28f7c00ac8132da4eb0fe393b057
   ast (2.4.3) sha256=954615157c1d6a382bc27d690d973195e79db7f55e9765ac7c481c60bdb4d383
-  async (2.35.3) sha256=6bfc75ac10182d0485b1394a50803b827f65e73f9e3ebe0aeaa4ecd770238271
-  async-http (0.94.0) sha256=479dc4a11c078aff7e054a729fc79fef7d0c28ca26bfe81a4d125672b28759ea
+  async (2.36.0) sha256=090623f4c65706664355c9efa6c7bfb86771a513e65cd681c51cb27747530550
+  async-http (0.94.2) sha256=c5ca94b337976578904a373833abe5b8dfb466a2946af75c4ae38c409c5c78b2
   async-pool (0.11.1) sha256=98e1583e199a75f7dc70f8e65fc8d0d3b28636c3f256595d43e206642ad8fbda
   aws-eventstream (1.4.0) sha256=116bf85c436200d1060811e6f5d2d40c88f65448f2125bc77ffce5121e6e183b
   aws-partitions (1.1206.0) sha256=9016c2d4f5d633aeb95d4cfeb936b5de3d752a5dbae4838bc19d53f202749301
@@ -233,7 +233,7 @@ CHECKSUMS
   fiber-storage (1.0.1) sha256=f48e5b6d8b0be96dac486332b55cee82240057065dc761c1ea692b2e719240e1
   hashdiff (1.2.1) sha256=9c079dbc513dfc8833ab59c0c2d8f230fa28499cc5efb4b8dd276cf931457cd1
   i18n (1.14.8) sha256=285778639134865c5e0f6269e0b818256017e8cde89993fdfcbfb64d088824a5
-  io-endpoint (0.16.0) sha256=b5517d9d2cde28e32ef0b0e13d4422d172a093760f50aad244d50282e990a114
+  io-endpoint (0.17.0) sha256=54c16c53b4ef6a67041a3ac18debf65661d91d446d91181b0383a92214a20195
   io-event (1.14.2) sha256=b0a069190eafe86005c22f7464f744971b5bd82f153740d34e6ab49548d4f613
   io-stream (0.11.1) sha256=fa5f551fcff99581c1757b9d1cee2c37b124f07d2ca4f40b756a05ab9bd21b87
   jmespath (1.6.2) sha256=238d774a58723d6c090494c8879b5e9918c19485f7e840f2c1c7532cf84ebcb1
@@ -247,8 +247,8 @@ CHECKSUMS
   parser (3.3.10.1) sha256=06f6a725d2cd91e5e7f2b7c32ba143631e1f7c8ae2fb918fc4cebec187e6a688
   prism (1.8.0) sha256=84453a16ef5530ea62c5f03ec16b52a459575ad4e7b9c2b360fd8ce2c39c1254
   protocol-hpack (1.5.1) sha256=6feca238b8078da1cd295677d6f306c6001af92d75fe0643d33e6956cbc3ad91
-  protocol-http (0.58.0) sha256=b77c5799e7a7acd31afaa9fed5c3714fe91ab7746925d66e9e4d92a5c74555fa
-  protocol-http1 (0.36.0) sha256=057344d2509a59338d0b4bc8f092a52126bb9ed51b76adbb4365f132bbd4ef09
+  protocol-http (0.58.1) sha256=6d0694aa07cd51ff589c6219f9613c6827aebd5ffdf8fb8a0169254feb0f13fd
+  protocol-http1 (0.37.0) sha256=5bdd739e28792b341134596f6f5ab21a9d4b395f67bae69e153743eb0e69d123
   protocol-http2 (0.24.0) sha256=65327a019b7e36d2774e94050bf57a43bb60212775d2fcf02ae1d2ed4f01ef28
   protocol-url (0.4.0) sha256=64d4c03b6b51ad815ac6fdaf77a1d91e5baf9220d26becb846c5459dacdea9e1
   public_suffix (7.0.2) sha256=9114090c8e4e7135c1fd0e7acfea33afaab38101884320c65aaa0ffb8e26a857
