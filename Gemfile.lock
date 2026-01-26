@@ -44,7 +44,7 @@ GEM
     async-pool (0.11.1)
       async (>= 2.0)
     aws-eventstream (1.4.0)
-    aws-partitions (1.1206.0)
+    aws-partitions (1.1209.0)
     aws-sdk-core (3.241.4)
       aws-eventstream (~> 1, >= 1.3.0)
       aws-partitions (~> 1, >= 1.992.0)
@@ -53,7 +53,7 @@ GEM
       bigdecimal
       jmespath (~> 1, >= 1.6.1)
       logger
-    aws-sdk-dynamodb (1.160.0)
+    aws-sdk-dynamodb (1.161.0)
       aws-sdk-core (~> 3, >= 3.241.4)
       aws-sigv4 (~> 1.5)
     aws-sdk-kms (1.121.0)
@@ -211,9 +211,9 @@ CHECKSUMS
   async-http (0.94.0) sha256=479dc4a11c078aff7e054a729fc79fef7d0c28ca26bfe81a4d125672b28759ea
   async-pool (0.11.1) sha256=98e1583e199a75f7dc70f8e65fc8d0d3b28636c3f256595d43e206642ad8fbda
   aws-eventstream (1.4.0) sha256=116bf85c436200d1060811e6f5d2d40c88f65448f2125bc77ffce5121e6e183b
-  aws-partitions (1.1206.0) sha256=9016c2d4f5d633aeb95d4cfeb936b5de3d752a5dbae4838bc19d53f202749301
+  aws-partitions (1.1209.0) sha256=c60a2e305dfdd9e21ecb92f8f78befe95c31eaa984750a733b16903928922981
   aws-sdk-core (3.241.4) sha256=a42ccba8c24ea9800e7b6c40aa201c967458f7c460044a6eebf64fbf1226e4fd
-  aws-sdk-dynamodb (1.160.0) sha256=4e64625ef1eeb64dc1f787ce7aaf81e10c5d0dc3391e327416ed2ef7e11ae291
+  aws-sdk-dynamodb (1.161.0) sha256=849b913a2b28cb9e1f800408b7690d5a37b30aba2e94f6ed66e3ba9fc91fce44
   aws-sdk-http-async (0.1.0)
   aws-sdk-kms (1.121.0) sha256=d563c1cfb4b5754efbc671216c8eca875338748adad0f42518c28dfa0a2d01e0
   aws-sdk-s3 (1.212.0) sha256=1e8ec4eee6914818dc79840e05c04fba9e61e8aa4822eef283fe593b93397c19
