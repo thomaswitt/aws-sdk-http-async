@@ -7,6 +7,21 @@ updates:
       day: monday
       time: "09:00"
     open-pull-requests-limit: 5
+    groups:
+      # async-http pins its protocol-* / io-* stack, so they must move as a unit.
+      async-stack:
+        patterns:
+          - "async"
+          - "async-*"
+          - "protocol-*"
+          - "io-*"
+      aws-sdk:
+        patterns:
+          - "aws-*"
+      rubocop:
+        patterns:
+          - "rubocop"
+          - "rubocop-*"
 
   - package-ecosystem: github-actions
     directory: "/"
