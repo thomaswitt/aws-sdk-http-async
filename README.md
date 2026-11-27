@@ -492,7 +492,7 @@ through a real proxy.
 
 ### Docker integration tests
 
-RSpec Integration tests run against DynamoDB Local + MinIO,
+RSpec Integration tests run against DynamoDB Local + RustFS,
 and proxy tests use tinyproxy + toxiproxy.
 
 ### RSpec/rails test setup
@@ -626,7 +626,7 @@ bin/ci
 Quick reference:
 
 ```bash
-VERSION=0.1.1
+VERSION=0.1.2
 
 # Build + push (after version bump + changelog)
 gem build aws-sdk-http-async.gemspec

@@ -13,10 +13,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ruby: [3.4]
+        ruby: ['3.4', '4.0']
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
@@ -49,26 +49,26 @@ jobs:
             exit 1
           fi
 
-      - name: Wait for MinIO readiness
+      - name: Wait for RustFS readiness
         run: |
           set -euo pipefail
-          export AWS_ACCESS_KEY_ID=minioadmin
-          export AWS_SECRET_ACCESS_KEY=minioadmin
+          export AWS_ACCESS_KEY_ID=rustfsadmin
+          export AWS_SECRET_ACCESS_KEY=rustfsadmin
           export AWS_DEFAULT_REGION=eu-central-1
           endpoint="http://localhost:9010"
           ready=false
           for attempt in {1..60}; do
             if aws --endpoint-url "${endpoint}" s3 ls >/dev/null 2>&1; then
-              echo "MinIO is ready"
+              echo "RustFS is ready"
               ready=true
               break
             fi
-            echo "Waiting for MinIO (attempt ${attempt}/60)"
+            echo "Waiting for RustFS (attempt ${attempt}/60)"
             sleep 2
           done
           if [ "${ready}" = false ]; then
-            echo "MinIO did not become ready in time" >&2
-            docker compose logs --no-color minio | tail -n 200 || true
+            echo "RustFS did not become ready in time" >&2
+            docker compose logs --no-color rustfs | tail -n 200 || true
             exit 1
           fi
 

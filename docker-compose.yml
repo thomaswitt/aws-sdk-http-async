@@ -4,7 +4,7 @@ name: aws-sdk-http-async
 
 services:
   dynamodb-local:
-    image: "amazon/dynamodb-local:latest"
+    image: "amazon/dynamodb-local:3.3.2"
     container_name: dynamodb-local-8011
     entrypoint:
       - "bash"
@@ -32,24 +32,29 @@ services:
       retries: 5
       start_period: 10s
 
-  minio:
-    image: minio/minio:latest
-    container_name: minio-local-9010
+  rustfs:
+    image: rustfs/rustfs:1.0.7
+    container_name: rustfs-local-9010
     restart: always
     ports:
       - "9010:9010"
       - "9011:9011"
-    entrypoint: minio server /data --address ":9010" --console-address ":9011"
+    environment:
+      - RUSTFS_ACCESS_KEY=rustfsadmin
+      - RUSTFS_SECRET_KEY=rustfsadmin
+      - RUSTFS_ADDRESS=0.0.0.0:9010
+      - RUSTFS_CONSOLE_ADDRESS=0.0.0.0:9011
+      - RUSTFS_REGION=eu-central-1
 
     healthcheck:
-      test: ["CMD", "curl", "-sf", "curl -sf http://localhost:9010/minio/health/live"]
+      test: ["CMD", "curl", "-sf", "http://localhost:9010/health"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
 
   tinyproxy:
-    image: kalaksi/tinyproxy:latest
+    image: kalaksi/tinyproxy:1.7
     container_name: tinyproxy-8888
     restart: always
     ports:
@@ -60,7 +65,7 @@ services:
       - "host.docker.internal:host-gateway"
 
   toxiproxy:
-    image: ghcr.io/shopify/toxiproxy:latest
+    image: ghcr.io/shopify/toxiproxy:2.13.0
     container_name: toxiproxy-8080
     restart: always
     ports:

@@ -1,6 +1,15 @@
 Unreleased Changes
 ------------------
 
+0.1.2 (2026-11-27)
+------------------
+
+* Issue - Maintenance release; the gem's code and runtime dependencies are unchanged from 0.1.1.
+
+* Issue - Fix CI: the `minio/minio` image can no longer be pulled from Docker Hub. The S3 integration tests now run against RustFS (`rustfs/rustfs`), and every Docker image in `docker-compose.yml` is pinned to a release instead of `:latest`. Dependabot now updates those images.
+
+* Issue - Test on Ruby 3.4 and 4.0 in CI, update `actions/checkout` to v7, and update development dependencies to their latest versions.
+
 0.1.1 (2026-11-26)
 ------------------
 

@@ -382,7 +382,7 @@ Ignored Net::HTTP options:
 - `Async::HTTP::Server` (real network IO)
 - Concurrency with multiple fibers
 - Timeouts and response handling
-- Docker-based tests for DynamoDB Local + MinIO
+- Docker-based tests for DynamoDB Local + RustFS
 - Proxy tests with tinyproxy + toxiproxy
 
 ### Plugin Order Test

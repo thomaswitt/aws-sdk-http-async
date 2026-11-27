@@ -105,16 +105,16 @@ RSpec.describe 'Docker services', :docker do
     end
   end
 
-  describe 'MinIO S3', :docker do
+  describe 'RustFS S3', :docker do
     before do
-      skip 'MinIO not running (docker compose up)' unless SpecHelper.minio_available?
+      skip 'RustFS not running (docker compose up)' unless SpecHelper.s3_available?
     end
 
     let(:client) do
       Aws::S3::Client.new(
-        endpoint: SpecHelper::MINIO_ENDPOINT,
+        endpoint: SpecHelper::S3_ENDPOINT,
         region: 'eu-central-1',
-        credentials: Aws::Credentials.new('minioadmin', 'minioadmin'),
+        credentials: Aws::Credentials.new('rustfsadmin', 'rustfsadmin'),
         force_path_style: true,
         async_http_fallback: :raise,
       )

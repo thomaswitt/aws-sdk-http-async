@@ -29,7 +29,7 @@ end
 
 module SpecHelper
   DYNAMODB_ENDPOINT = 'http://localhost:8011'.freeze
-  MINIO_ENDPOINT = 'http://localhost:9010'.freeze
+  S3_ENDPOINT = 'http://localhost:9010'.freeze
   TOXIPROXY_ENDPOINT = 'http://localhost:8474'.freeze
   TINYPROXY_ENDPOINT = 'http://127.0.0.1:8888'.freeze
 
@@ -125,8 +125,8 @@ module SpecHelper
     end
 
     # @return [Boolean]
-    def minio_available?
-      uri = URI("#{MINIO_ENDPOINT}/minio/health/live")
+    def s3_available?
+      uri = URI("#{S3_ENDPOINT}/health")
       Net::HTTP.get_response(uri).is_a?(Net::HTTPSuccess)
     rescue Errno::ECONNREFUSED, Errno::EADDRNOTAVAIL, Errno::ECONNRESET, SocketError
       false

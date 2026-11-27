@@ -114,11 +114,11 @@ if docker_enabled
     exit 1
   end
 
-  minio_uri = URI('http://localhost:9010/minio/health/live')
-  unless wait_for_service('MinIO') do
-    Net::HTTP.get_response(minio_uri).is_a?(Net::HTTPSuccess)
+  s3_uri = URI('http://localhost:9010/health')
+  unless wait_for_service('RustFS') do
+    Net::HTTP.get_response(s3_uri).is_a?(Net::HTTPSuccess)
   end
-    warn 'MinIO did not become ready in time'
+    warn 'RustFS did not become ready in time'
     exit 1
   end
 

@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    aws-sdk-http-async (0.1.1)
+    aws-sdk-http-async (0.1.2)
       async (>= 2.46.0)
       async-http (>= 0.105.0)
       aws-sdk-core (>= 3.241.0)
@@ -183,7 +183,7 @@ GEM
       unicode-emoji (~> 4.3)
     unicode-emoji (4.3.0)
     uri (1.1.2)
-    webmock (3.41.0)
+    webmock (3.42.0)
       addressable (>= 2.8.0)
       crack (>= 0.3.2)
       hashdiff (>= 0.4.0, < 2.0.0)
@@ -218,7 +218,7 @@ CHECKSUMS
   aws-partitions (1.1312.0) sha256=0847fdfb5063e37a8f06dbe99a3a14fc09a84f3c2aa65b3d2b913de075edc1fa
   aws-sdk-core (3.272.0) sha256=decc1b6385865ea0756bb3d5926e7cef4628d8ec2b76d6748fd71df50997590d
   aws-sdk-dynamodb (1.187.0) sha256=92f927363d955b08c2940c26b41836ba707e0a0ad797bd5db6a0c38e5e88671c
-  aws-sdk-http-async (0.1.1)
+  aws-sdk-http-async (0.1.2)
   aws-sdk-kms (1.145.0) sha256=ddbe86fca434f9a28bd0480b68fc0ce8bae555b6fd41b370bb00caa2dcf58853
   aws-sdk-s3 (1.245.2) sha256=df02d9a5d969728c8c6f3b48e783646a839215dca6c5242cea45eb14144fad7a
   aws-sigv4 (1.12.1) sha256=6973ff95cb0fd0dc58ba26e90e9510a2219525d07620c8babeb70ef831826c00
@@ -283,7 +283,7 @@ CHECKSUMS
   unicode-display_width (3.3.0) sha256=4b7aa66a4b11db50f6f7e98411215cd0dd10eaecb665d36eec5bcacb3fa0b613
   unicode-emoji (4.3.0) sha256=11c02fa73290378c066bb0562cd4c87d8e1b706fbbe0059ca12746a4244de8ce
   uri (1.1.2) sha256=89292e98eabbef6248b0a0ed5e7e398e152f83f17560023a6d94a7f492b169fb
-  webmock (3.41.0) sha256=9648ac9f83881790f562130d04cf54d74c4bd5e90740c519535b14da0757ee74
+  webmock (3.42.0) sha256=5479f4613b184727767b0b35e4d490b09de85caa4e04d7e5f7256917514877e2
 
 BUNDLED WITH
   4.0.4
