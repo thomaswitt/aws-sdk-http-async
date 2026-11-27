@@ -25,7 +25,7 @@ scan).
 
 ## Critical Constraints
 
-- **Ruby 3.4+ only.** `aws-sdk-core >= 3.241.0`, `async >= 2.46.0`,
+- **Ruby 4.0+ only.** `aws-sdk-core >= 3.241.0`, `async >= 2.46.0`,
 `async-http >= 0.105.0`.
 - **Pure gem** (no Rails/ActiveRecord).
 - **Seahorse handler contract** must be preserved:

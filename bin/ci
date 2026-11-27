@@ -114,7 +114,7 @@ if docker_enabled
     exit 1
   end
 
-  s3_uri = URI('http://localhost:9010/health')
+  s3_uri = URI('http://localhost:9010/health/ready')
   unless wait_for_service('RustFS') do
     Net::HTTP.get_response(s3_uri).is_a?(Net::HTTPSuccess)
   end

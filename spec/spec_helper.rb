@@ -126,7 +126,7 @@ module SpecHelper
 
     # @return [Boolean]
     def s3_available?
-      uri = URI("#{S3_ENDPOINT}/health")
+      uri = URI("#{S3_ENDPOINT}/health/ready")
       Net::HTTP.get_response(uri).is_a?(Net::HTTPSuccess)
     rescue Errno::ECONNREFUSED, Errno::EADDRNOTAVAIL, Errno::ECONNRESET, SocketError
       false

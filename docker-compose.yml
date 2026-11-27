@@ -47,7 +47,7 @@ services:
       - RUSTFS_REGION=eu-central-1
 
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:9010/health"]
+      test: ["CMD", "curl", "-sf", "http://localhost:9010/health/ready"]
       interval: 10s
       timeout: 5s
       retries: 5

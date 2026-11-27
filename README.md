@@ -626,7 +626,7 @@ bin/ci
 Quick reference:
 
 ```bash
-VERSION=0.1.2
+VERSION=0.2.0
 
 # Build + push (after version bump + changelog)
 gem build aws-sdk-http-async.gemspec
@@ -648,7 +648,7 @@ gh release create "v${VERSION}" \
 
 ### Requirements
 
-- Ruby 3.4+
+- Ruby 4.0+
 - aws-sdk-core >= 3.241.0
 - async >= 2.46.0
 - async-http >= 0.105.0

@@ -1,14 +1,14 @@
 Unreleased Changes
 ------------------
 
-0.1.2 (2026-11-27)
+0.2.0 (2026-11-27)
 ------------------
 
-* Issue - Maintenance release; the gem's code and runtime dependencies are unchanged from 0.1.1.
+* Feature - Require Ruby 4.0 or later. On Ruby 3.4, closing a socket does not wake a fiber that is blocked reading or writing it, so `ClientCache#clear!(timeout:)` could not fail in-flight requests once its deadline passed; they waited for their own socket timeout instead. Ruby 4.0 wakes them. Ruby 3.4 users stay on 0.1.1. The library code and the other runtime dependencies are unchanged.
 
 * Issue - Fix CI: the `minio/minio` image can no longer be pulled from Docker Hub. The S3 integration tests now run against RustFS (`rustfs/rustfs`), and every Docker image in `docker-compose.yml` is pinned to a release instead of `:latest`. Dependabot now updates those images.
 
-* Issue - Test on Ruby 3.4 and 4.0 in CI, update `actions/checkout` to v7, and update development dependencies to their latest versions.
+* Issue - Test on Ruby 4.0 in CI, update `actions/checkout` to v7, and update development dependencies to their latest versions.
 
 0.1.1 (2026-11-26)
 ------------------
