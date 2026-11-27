@@ -95,7 +95,7 @@ docker_services_started = false
 if docker_enabled
   if ENV['AWS_SDK_HTTP_ASYNC_DOCKER_STARTED'] != '1'
     puts 'Starting docker services...'
-    system('docker', 'compose', 'up', '-d', '--force-recreate') || exit(1)
+    system('docker', 'compose', 'up', '-d', '--force-recreate', '--remove-orphans') || exit(1)
     docker_services_started = true
   end
 
