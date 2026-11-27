@@ -25,7 +25,8 @@ scan).
 
 ## Critical Constraints
 
-- **Ruby 3.4+ only.** `aws-sdk-core >= 3.241.0`, `async-http >= 0.94.0`.
+- **Ruby 3.4+ only.** `aws-sdk-core >= 3.241.0`, `async >= 2.46.0`,
+`async-http >= 0.105.0`.
 - **Pure gem** (no Rails/ActiveRecord).
 - **Seahorse handler contract** must be preserved:
   - `signal_headers`, `signal_data`, `signal_done`, `signal_error`.
@@ -82,21 +83,33 @@ boundaries (RFC 6265).
 headers + body).
 - `async_http_idle_timeout` is used as the endpoint timeout when
   `http_open_timeout` is unset.
+- The transport's own deadlines raise `TransportTimeoutError` (mapped to a
+  networking error); a caller's own `Async::TimeoutError` passes through.
 - `timeout <= 0` disables timeouts.
 
 ### Client Cache (Per Reactor)
 
+- Handlers share the process-wide `Async::Aws::ClientCache.default` (Seahorse
+builds a new handler per API call); `async_http_client_cache` overrides it.
 - Per-reactor LRU cache, capped by `async_http_max_cached_clients` (default
 100).
+- Entries of closed reactors are dropped; a forked child drops inherited
+entries without a protocol-level close (it only closes its own copies of the
+sockets).
+- `async_http_connection_limit` defaults to 50 per reactor and endpoint.
+Connections open concurrently; a per-entry semaphore keeps to the limit.
+- `http_idle_timeout` (default 5s) closes unused pooled connections.
+- Closes of entries taken out of the cache run in a transient task, so a
+cancelled request does not abandon them.
 - Cache key includes endpoint, connection limit, open timeout, proxy + SSL
 settings.
 - Reactor binding tracked via `WeakRef` to avoid stale clients on GC.
 - **Cold-start guard removed**: concurrent cold hits can build duplicate
 clients; extras are closed. This avoids Async + Mutex deadlocks and keeps logic
 simple.
-- `clear!`/`close!` are shutdown-only; **call inside each reactor** to close on
-owning reactor. If called outside a reactor, it force-closes (may interrupt
-in-flight requests).
+- `clear!`/`close!` are shutdown-only; **call inside each reactor**. A client is
+closed only by its own reactor or after that reactor finished, never from
+another thread (`timeout:` bounds the total wait for in-flight requests).
 
 ### SSL and Certificates
 
@@ -118,6 +131,8 @@ supported).
 - Uses CONNECT for HTTPS. No env proxy support, PAC, or auto-discovery.
 - Proxy auth is Basic derived from `user:pass@` (userinfo is percent-decoded).
 - Proxy credentials are hashed in cache keys to avoid leaking secrets.
+- CONNECT tunnels are pooled and owned by the reactor (`TunnelEndpoint`), not by
+the request that opened them.
 
 ## Patching and Activation
 

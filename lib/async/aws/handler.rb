@@ -13,23 +13,89 @@ require 'seahorse/client/networking_error'
 module Async
   module Aws
     class Handler < Seahorse::Client::Handler
+      # Seahorse builds a new handler for every API call, so anything that must
+      # outlive one call (warn-once bookkeeping, the Net::HTTP fallback handler)
+      # lives on the class.
       @transport_mutex = Mutex.new
       @transport_logged = {}
+      @warned = {}
+      @shared_state_pid = Process.pid
+      @net_http_handler = nil
+      WARN_ONCE_LIMIT = 100
 
       class << self
         # @param kind [Symbol]
         # @param logger [Logger, nil]
         # @return [void]
         def log_transport_once(kind, logger)
-          return unless kind == :async_http
+          return unless kind == :async_http && logger
 
           @transport_mutex.synchronize do
+            forget_inherited_state
             return if @transport_logged[kind]
 
             @transport_logged[kind] = true
           end
 
-          logger&.info('[aws-sdk-http-async] using async-http transport')
+          logger.info('[aws-sdk-http-async] using async-http transport')
+        end
+
+        # Logs `message` as a warning the first time `key` is seen in this
+        # process. A call without a logger does not count as seen.
+        #
+        # @api private
+        # @param key [String]
+        # @param logger [Logger, nil]
+        # @param message [String]
+        # @return [void]
+        def warn_once(key, logger, message)
+          return unless logger
+
+          @transport_mutex.synchronize do
+            forget_inherited_state
+            return if @warned[key]
+
+            # Bounded: past the limit a new key warns on every occurrence.
+            @warned[key] = true if @warned.size < WARN_ONCE_LIMIT
+          end
+
+          logger.warn(message)
+        end
+
+        # @api private
+        # @return [Seahorse::Client::NetHttp::Handler] shared stateless fallback handler
+        def net_http_handler
+          return @net_http_handler if @net_http_handler
+
+          @transport_mutex.synchronize do
+            @net_http_handler ||= begin
+                require 'seahorse/client/net_http/handler'
+                Seahorse::Client::NetHttp::Handler.new(nil)
+              end
+          end
+        end
+
+        # Forgets the log-once/warn-once state. Intended for tests.
+        #
+        # @api private
+        # @return [void]
+        def reset_shared_state!
+          @transport_mutex.synchronize do
+            @transport_logged.clear
+            @warned.clear
+          end
+        end
+
+        private
+
+        # "Once per process": a forked child logs again, possibly to another
+        # destination than its parent. Called with the mutex held.
+        def forget_inherited_state
+          return if @shared_state_pid == Process.pid
+
+          @transport_logged.clear
+          @warned.clear
+          @shared_state_pid = Process.pid
         end
       end
 
@@ -163,14 +229,12 @@ module Async
       ].freeze
 
       # @param handler [Seahorse::Client::Handler, nil]
-      # @param client_cache [Async::Aws::ClientCache, nil]
+      # @param client_cache [Async::Aws::ClientCache, nil] defaults to the
+      #   process-wide {Async::Aws::ClientCache.default}
       # @return [void]
       def initialize(handler = nil, client_cache: nil)
         super(handler)
-        @client_cache = client_cache || ClientCache.new
-        @fallback_mutex = Mutex.new
-        @invalid_fallback_warned = {}
-        @invalid_streaming_warned = {}
+        @client_cache = client_cache
       end
 
       # @param context [Seahorse::Client::RequestContext]
@@ -229,18 +293,34 @@ module Async
         when :raise
           raise NoReactorError, 'Async reactor is required. Wrap calls in Sync { }.'
         when :sync
-          Sync { call_with_reactor(context) }
+          # Without a scheduler, Sync creates a reactor that ends with the block.
+          transient_reactor = Fiber.scheduler.nil?
+          Sync do
+            call_with_reactor(context)
+          ensure
+            close_transient_clients(context.config) if transient_reactor
+          end
         else
           return @handler.call(context) if @handler
 
-          net_http_handler.call(context)
+          Handler.net_http_handler.call(context)
         end
+      end
+
+      # The reactor of a :sync call ends with it: close its clients first, so
+      # their entries do not stay in the cache. An injected cache-like object
+      # manages its own lifecycle.
+      def close_transient_clients(config)
+        cache = client_cache(config)
+        cache.clear! if cache.is_a?(ClientCache)
+      rescue StandardError => e
+        logger_for(config)&.warn("[aws-sdk-http-async] failed to close clients of the :sync reactor: #{e.message}")
       end
 
       def force_net_http(context)
         return @handler.call(context) if @handler
 
-        net_http_handler.call(context)
+        Handler.net_http_handler.call(context)
       end
 
       def fallback_mode(config)
@@ -263,19 +343,15 @@ module Async
       end
 
       def warn_invalid_fallback_once(source, value, config)
-        key = "#{source}:#{value.inspect}"
-        @fallback_mutex.synchronize do
-          return if @invalid_fallback_warned[key]
-
-          @invalid_fallback_warned[key] = true
-        end
-        logger_for(config)&.warn(
-          "[aws-sdk-http-async] invalid async_http_fallback #{source}=#{value.inspect}; using :net_http"
+        Handler.warn_once(
+          "fallback:#{source}:#{value.inspect}",
+          logger_for(config),
+          "[aws-sdk-http-async] invalid async_http_fallback #{source}=#{value.inspect}; using :net_http",
         )
       end
 
       def log_transport_once(kind, config)
-        self.class.log_transport_once(kind, logger_for(config))
+        Handler.log_transport_once(kind, logger_for(config))
       end
 
       def streaming_mode(config)
@@ -290,72 +366,99 @@ module Async
       end
 
       def warn_invalid_streaming_once(value, config)
-        key = value.inspect
-        @fallback_mutex.synchronize do
-          return if @invalid_streaming_warned[key]
-
-          @invalid_streaming_warned[key] = true
-        end
-        logger_for(config)&.warn(
-          "[aws-sdk-http-async] invalid async_http_streaming_uploads=#{value.inspect}; using :auto"
+        Handler.warn_once(
+          "streaming:#{value.inspect}",
+          logger_for(config),
+          "[aws-sdk-http-async] invalid async_http_streaming_uploads=#{value.inspect}; using :auto",
         )
-      end
-
-      def net_http_handler
-        return @net_http_handler if @net_http_handler
-
-        @fallback_mutex.synchronize do
-          return @net_http_handler if @net_http_handler
-
-          require 'seahorse/client/net_http/handler'
-          @net_http_handler = Seahorse::Client::NetHttp::Handler.new(nil)
-        end
       end
 
       def transmit(config, req, resp)
         total_timeout = config.async_http_total_timeout
-        if total_timeout && total_timeout > 0
-          Async::Task.current.with_timeout(total_timeout, Async::TimeoutError) do
-            transmit_inner(config, req, resp)
-          end
-        else
-          transmit_inner(config, req, resp)
+        return transmit_inner(config, req, resp) unless total_timeout && total_timeout > 0
+
+        # Raised as a copy of this instance, which carries the scope along.
+        expired = TransportTimeoutError.new
+        expired.scope = scope = Object.new
+        Async::Task.current.with_timeout(total_timeout, expired) do |deadline|
+          transmit_inner(config, req, resp, deadline:, scope:)
         end
       end
 
-      def transmit_inner(config, req, resp)
-        cache = config.async_http_client_cache || @client_cache
+      def client_cache(config)
+        config.async_http_client_cache || @client_cache || ClientCache.default
+      end
+
+      def transmit_inner(config, req, resp, deadline: nil, scope: nil)
+        cache = client_cache(config)
+        # Set once the outcome of the request has been signalled to Seahorse.
+        settled = false
+        # Set while the connection is used: what fails then is not the caller's code.
+        on_wire = false
         runner = ->(client) do
           request = build_request(req, config)
           response = nil
 
           begin
+            on_wire = true
             response = call_with_timeout(client, request, config)
+            on_wire = false
             bytes_received = 0
 
             headers = response_headers(response)
             resp.signal_headers(response.status.to_i, headers)
 
             loop do
+              on_wire = true
               chunk = read_with_timeout(response, config)
+              on_wire = false
               break if chunk.nil? || chunk.empty?
 
               bytes_received += chunk.bytesize
               resp.signal_data(chunk)
             end
 
+            # The response is complete: the total deadline must not interrupt
+            # the listeners Seahorse runs now, nor turn their result into a
+            # retry. The same holds for the listeners of an error, below.
+            deadline&.cancel!
             complete_response(req, resp, bytes_received, headers)
+            settled = true
           rescue Async::Stop
             raise
-          rescue *NETWORK_ERRORS => error
+          rescue Async::TimeoutError => error
+            # Not one of this transport's deadlines: the caller's own
+            # `with_timeout` around the call. It is not a network error and
+            # must not be retried.
+            raise unless transport_timeout?(error, scope)
+
+            settled = true
+            deadline&.cancel!
             resp.signal_error(networking_error(error, req))
-          rescue SystemCallError => error
+          rescue *NETWORK_ERRORS, SystemCallError => error
+            settled = true
+            deadline&.cancel!
             resp.signal_error(networking_error(error, req))
           rescue StandardError => error
-            logger_for(config)&.error("[aws-sdk-http-async] unexpected error: #{error.class}: #{error.message}")
-            resp.signal_error(error)
+            settled = true
+            deadline&.cancel!
+            if on_wire && cache.respond_to?(:force_closed?) && cache.force_closed?(client)
+              # The connection was closed under the request (`clear!(timeout:)`),
+              # which protocol-http1 reports as whatever its torn-down state raises.
+              resp.signal_error(networking_error(error, req))
+            else
+              logger_for(config)&.error("[aws-sdk-http-async] unexpected error: #{error.class}: #{error.message}")
+              resp.signal_error(error)
+            end
           ensure
-            response&.close
+            # The request is over, whichever way it ends. The total deadline
+            # does not cover the cleanup: giving up the turn switches to the
+            # call that waits for it, and a deadline that came due in that pass
+            # of the event loop would replace a stop or a timeout of the caller
+            # on its way out and be reported as a network error, which the SDK
+            # retries.
+            deadline&.cancel!
+            close_response(response)
           end
         end
 
@@ -364,6 +467,39 @@ module Async
         else
           runner.call(cache.client_for(req.endpoint, config))
         end
+      rescue TransportTimeoutError => error
+        raise unless transport_timeout?(error, scope)
+
+        # Timed out while waiting its turn: a network error like a timeout
+        # during the request. Once the outcome is signalled, a timeout can only
+        # have hit the cleanup of a finished request, and signalling an error
+        # then would make the SDK retry an operation that succeeded.
+        return if settled
+
+        # The wait for a turn has its own timeout; the total deadline must not
+        # cut off the listeners of the error either.
+        deadline&.cancel!
+        resp.signal_error(networking_error(error, req))
+      end
+
+      # The outcome is signalled by now. After `clear!(timeout:)` closed the
+      # socket under the request, closing a partly read body raises; that must
+      # not replace the error that was signalled.
+      def close_response(response)
+        response&.close
+      rescue IOError, SystemCallError
+        nil
+      end
+
+      # Whether `error` is a deadline of this invocation. The total deadline of
+      # an outer call (one whose streaming block makes this call) is not: like a
+      # timeout the caller put around the call, it passes through. WebMock's
+      # `to_timeout` raises a plain `Async::TimeoutError` from inside the
+      # stubbed client; it stands for a network timeout.
+      def transport_timeout?(error, scope)
+        return error.message == 'WebMock timeout error' unless error.is_a?(TransportTimeoutError)
+
+        error.scope.nil? || error.scope.equal?(scope)
       end
 
       def build_request(http_request, config)
@@ -552,7 +688,7 @@ module Async
         return nil if body.nil?
         return read_response_chunk(body) if timeout.nil? || timeout <= 0
 
-        Async::Task.current.with_timeout(timeout, Async::TimeoutError) { read_response_chunk(body) }
+        Async::Task.current.with_timeout(timeout, TransportTimeoutError) { read_response_chunk(body) }
       end
 
       def read_response_chunk(body)
@@ -572,7 +708,7 @@ module Async
       def call_with_timeout(client, request, config)
         header_timeout = config.async_http_header_timeout
         if header_timeout && header_timeout > 0
-          return Async::Task.current.with_timeout(header_timeout, Async::TimeoutError) { client.call(request) }
+          return Async::Task.current.with_timeout(header_timeout, TransportTimeoutError) { client.call(request) }
         end
 
         timeout = config.http_read_timeout
@@ -581,7 +717,7 @@ module Async
         body = request.body
         return client.call(request) unless body.nil? || body.is_a?(String) || body.is_a?(Protocol::HTTP::Body::Buffered)
 
-        Async::Task.current.with_timeout(timeout, Async::TimeoutError) { client.call(request) }
+        Async::Task.current.with_timeout(timeout, TransportTimeoutError) { client.call(request) }
       end
 
       def complete_response(req, resp, bytes_received, headers)

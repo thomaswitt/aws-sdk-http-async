@@ -7,7 +7,7 @@ RSpec.describe Async::Aws::HttpPlugin do
     described_class.new.add_options(config)
     built = config.build!
 
-    expect(built.async_http_connection_limit).to eq(10)
+    expect(built.async_http_connection_limit).to eq(50)
     expect(built.async_http_force_accept_encoding).to be(true)
     expect(built.async_http_body_warn_bytes).to eq(5 * 1024 * 1024)
     expect(built.async_http_max_buffer_bytes).to eq(5 * 1024 * 1024)

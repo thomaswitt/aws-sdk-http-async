@@ -8,7 +8,7 @@ module Async
       def add_options(config)
         Seahorse::Client::Plugins::NetHttp.new.add_options(config)
 
-        config.add_option(:async_http_connection_limit, 10)
+        config.add_option(:async_http_connection_limit, 50)
         config.add_option(:async_http_force_accept_encoding, true)
         config.add_option(:async_http_body_warn_bytes, 5 * 1024 * 1024)
         config.add_option(:async_http_max_buffer_bytes, 5 * 1024 * 1024)

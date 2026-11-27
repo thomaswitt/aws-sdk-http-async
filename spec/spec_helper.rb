@@ -6,10 +6,12 @@ require 'logger'
 require 'net/http'
 require 'socket'
 require 'rspec'
-require 'console'
 
-Console.logger = Logger.new(nil)
-Console.logger.level = Logger::FATAL if Console.logger.respond_to?(:level=)
+# Silence async's console output on every thread. Keep Console's own logger: a
+# stdlib Logger rejects `Console.debug(subject, message, **options)`, which
+# makes Async::Pool::Controller#close raise and leaves pooled connections open.
+ENV['CONSOLE_LEVEL'] ||= 'fatal'
+require 'console'
 
 require 'async'
 require 'async/http'
@@ -18,6 +20,12 @@ require 'aws-sdk-core'
 require 'aws-sdk-http-async'
 require 'aws-sdk-dynamodb'
 require 'aws-sdk-s3'
+
+RSpec.configure do |config|
+  # The default client cache and the handler's warn-once state are process-wide.
+  config.before { Async::Aws::Handler.reset_shared_state! }
+  config.after { Async::Aws::ClientCache.default.clear! }
+end
 
 module SpecHelper
   DYNAMODB_ENDPOINT = 'http://localhost:8011'.freeze

@@ -10,7 +10,8 @@ All architectural decisions belong in `md-docs/`.
 
 ## Critical Constraints
 
-- Ruby 3.4+ only (`aws-sdk-core >= 3.241.0`, `async-http >= 0.94.0`).
+- Ruby 3.4+ only (`aws-sdk-core >= 3.241.0`, `async >= 2.46.0`,
+  `async-http >= 0.105.0`).
 - Pure gem (no Rails/ActiveRecord).
 - Preserve Seahorse handler contract and error semantics.
 - YARD docs required for public methods.
@@ -39,11 +40,21 @@ buffers, `StreamingBody#buffered`).
 
 ### Client Cache
 
+- Handlers share the process-wide `ClientCache.default` (Seahorse builds a new
+handler per API call); `async_http_client_cache` overrides it.
 - Per-reactor LRU (default 100) with `WeakRef` to avoid stale reactors.
+- Entries of closed reactors are dropped; a forked child drops inherited
+entries without a protocol-level close (it only closes its own copies of the
+sockets).
+- `async_http_connection_limit` defaults to 50 per reactor and endpoint.
+Connections open concurrently; a per-entry semaphore keeps to the limit.
+- `http_idle_timeout` (default 5s) closes unused pooled connections.
+- Closes of entries taken out of the cache run in a transient task, so a
+cancelled request does not abandon them.
 - Cold-start gate removed (simple double-checked insert); duplicate builds are
 closed.
-- `clear!`/`close!` should run inside each reactor; outside reactor
-force-closes.
+- `clear!`/`close!` closes the calling reactor's clients and those of finished
+reactors; never another running reactor's.
 
 ### SSL + Proxy
 
@@ -53,6 +64,8 @@ force-closes.
 raise.
 - File reads are blocking; prefer preloaded OpenSSL objects.
 - `http_proxy` supports Basic auth, CONNECT for HTTPS; no env proxy/PAC.
+- CONNECT tunnels are pooled and owned by the reactor (`TunnelEndpoint`), not by
+the request that opened them.
 - Proxy credentials hashed in cache key; percent-decoding preserves `+`.
 
 ### Headers + Timeouts
@@ -64,6 +77,8 @@ raise.
 - `async_http_total_timeout` = total request deadline (upload + headers + body).
 - `async_http_idle_timeout` is used as the endpoint timeout when
   `http_open_timeout` is unset.
+- The transport's own deadlines raise `TransportTimeoutError` (mapped to a
+  networking error); a caller's own `Async::TimeoutError` passes through.
 
 ## Development Commands
 

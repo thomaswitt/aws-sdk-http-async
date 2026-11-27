@@ -199,7 +199,7 @@ Supported options (inherited from Net::HTTP plugin):
 
 - `http_open_timeout`
 - `http_read_timeout`
-- `http_idle_timeout` (ignored; async-http manages internally)
+- `http_idle_timeout` (default: 5; a pooled connection is closed once it has been unused for one to two times this many seconds)
 - `ssl_verify_peer`
 - `ssl_ca_store`
 - `ssl_ca_bundle`
@@ -228,6 +228,11 @@ Aws::DynamoDB::Client.new(
 
 Tip: Reuse OpenSSL certificate/key objects across client instances to keep cache keys stable.
 
+Certificate and key **files** are read once per cached client, not per request.
+After rotating files in place, call `clear!` on the cache in use (by default
+`Async::Aws::ClientCache.default`) inside each reactor, or restart, so new
+connections present the new certificate.
+
 #### Proxy Support Notes
 
 `http_proxy` accepts a full URL, e.g.:
@@ -245,10 +250,20 @@ Limitations:
 - HTTPS proxies reuse the same SSL verification options as the target (CA
 store/bundle/dir).
 - All requests for the client go through the configured proxy.
+- Tunnels are pooled like direct connections. A tunnel belongs to its reactor,
+  not to the request that opened it: cancelling that request leaves the tunnel
+  usable for other calls, and an open tunnel does not keep a short‑lived
+  `Sync { }` block from finishing.
+- A tunnel socket gets the same I/O timeout as a direct connection
+  (`http_open_timeout`), so a tunnel the proxy dropped fails the request
+  instead of leaving it waiting.
+- When the reactor is stopped (SIGINT), idle tunnels are closed at once and a
+  tunnel in use is closed after its request, like direct connections: requests
+  that a server is still answering (`defer_stop`) can finish.
 
 ### Plugin options
 
-- `async_http_connection_limit` (default: 10)
+- `async_http_connection_limit` (default: 50; max connections per reactor and endpoint, `nil` or `0` for unlimited, see [Connection limit](#connection-limit))
 - `async_http_force_accept_encoding` (default: true)
 - `async_http_body_warn_bytes` (default: 5_242_880)
 - `async_http_max_buffer_bytes` (default: 5MB; raise if buffering exceeds this; set to `nil` or `0` for unlimited)
@@ -258,7 +273,7 @@ store/bundle/dir).
 - `async_http_max_cached_clients` (default: 100; LRU eviction per reactor when exceeded)
 - `async_http_streaming_uploads` (default: :auto; values: :auto, :force, :off)
 - `async_http_fallback` (default: :net_http; values: :net_http, :sync, :raise)
-- `async_http_client_cache` (default: nil, injectable cache for lifecycle control)
+- `async_http_client_cache` (default: nil, which uses the process-wide `Async::Aws::ClientCache.default`; inject a cache for lifecycle control)
 
 ### Timeout semantics
 
@@ -271,6 +286,19 @@ slow‑loris response that sends a byte before each timeout can remain open
 indefinitely; add your own total deadline if needed. Use
 `async_http_total_timeout` to enforce an overall deadline (upload + headers +
 body).
+
+When one of these timeouts expires, the call fails with a
+`Seahorse::Client::NetworkingError`, which the SDK may retry. A timeout you put
+around a call yourself is not one of them: `task.with_timeout(2) {
+client.get_item(...) }` raises `Async::TimeoutError` to your code after 2
+seconds and the call is not retried. (Up to 0.1.0 such a timeout was reported
+as a networking error and the request was sent again without a deadline.)
+
+One case is not covered: an upload to a peer that has stopped reading. Closing
+that connection waits for the socket timeout (`http_open_timeout`), so your
+timeout arrives that much later, and if one of the transport's timeouts has
+already expired for the attempt, your timeout is lost and the attempt is
+reported as a networking error (see "Known limits" in the RFC).
 
 ### Opt-out of auto-patching
 
@@ -300,31 +328,135 @@ inherit the plugin from their parent class and are not tracked for removal.
 Note: patching scans existing classes at load time; require this gem early in
 boot for best results.
 
-## Cache injection
+## Connection reuse
+
+The gem keeps one `Async::HTTP::Client` (a connection pool) per **reactor +
+endpoint + connection‑relevant config** in a process‑wide cache,
+`Async::Aws::ClientCache.default`. Every AWS client and every API call in the
+process shares it, so calls inside one reactor reuse connections instead of
+opening a new one each time. There is nothing to configure.
+
+- **Per reactor.** A pool belongs to the reactor that created it, so each
+  Falcon worker (or each thread running its own reactor) has its own pools.
+  When a reactor finishes, its pools close their connections and the cache
+  drops the entries.
+- **Transient reactors.** `Sync { }` around a single call, and the `:sync`
+  fallback mode, create one reactor per call, so each call opens and closes its
+  own connection. Wrap the whole unit of work in one `Sync { }` to reuse
+  connections.
+- **Bounded.** `async_http_max_cached_clients` (default: 100) caps the cached
+  clients per reactor with LRU eviction; an evicted client is closed. Clients
+  with a request in flight are never evicted, so a burst can exceed the cap
+  until those requests finish. Set it to `nil` or `0` to disable eviction.
+  All AWS clients in a reactor share the cache: the cap is applied whenever a
+  client is added, with the cap of the AWS client that adds it, to all of that
+  reactor's cached clients.
+- **Idle connections.** A connection is closed once it has been unused for one
+  to two times `http_idle_timeout` (default: 5 seconds), so a quiet pool
+  shrinks again and does not hand out connections that a NAT gateway or
+  firewall dropped in the meantime.
+- **Reused connections can fail once.** A server may close a kept‑alive
+  connection at the moment a call reuses it. Connections that were already
+  closed when they are picked are replaced, but a request that crosses the
+  close on the wire fails with `Seahorse::Client::NetworkingError`
+  (`EOFError` or `Errno::ECONNRESET`), as with the SDK's Net::HTTP pool. The
+  SDK retries it on a new connection; with retries disabled
+  (`max_attempts: 1`; `retry_limit: 0` only in the `legacy` retry mode) the
+  error reaches your code.
+- **Fork‑safe.** A forked child starts with an empty cache and writes nothing
+  to the parent's connections (it closes its own copies of the sockets the
+  first time it uses the cache; a child that only makes reactorless
+  Net::HTTP fallback calls keeps them until it exits). Fork outside a reactor, as preforking servers do;
+  forking in the middle of a running reactor is not supported. A connection
+  that another thread's reactor was still opening at the moment of the fork
+  (connect or TLS handshake) is not in a pool yet: the child's copy of that
+  socket stays open until it is garbage collected.
+
+### Connection limit
+
+`async_http_connection_limit` (default: 50) is the maximum number of
+connections of one cached client, i.e. **per reactor and endpoint** (AWS
+clients whose connection config differs, e.g. another `http_open_timeout`, TLS
+setting or proxy, get separate clients with their own limit). The gem speaks
+HTTP/1.1, where one connection carries one request at a time, so it is also
+the maximum number of requests in flight to that endpoint. Further calls wait
+their turn. New connections are opened concurrently, so a cold burst does not
+queue behind one handshake. The limit counts requests: a connection that is
+still finishing an upload after the server answered early is not counted, so
+the pool can hold more connections than the limit. The surplus goes when it
+has been idle for `http_idle_timeout`; with `http_idle_timeout: 0` it stays
+until the client is closed. `nil`, `0` or a negative value means no limit.
+
+- **Higher** allows more parallel calls (a request that fans out 32–64
+  concurrent calls needs at least that many to avoid queueing), at the cost of
+  more sockets and more load that AWS may throttle. Budget up to `limit` file
+  descriptors per cached client (three per connection through a proxy), see
+  [File Handle Limits](#file-handle-limits-emfile).
+- **Lower** keeps the socket count small; excess calls queue.
+
+A call that waits its turn is bounded by `async_http_header_timeout` (the wait
+for a turn and the wait for response headers each get that long) and by
+`async_http_total_timeout`. Both are off by default: without one of them a
+queued call waits indefinitely. A call that gives up fails with a networking
+error, which the SDK may retry.
+
+Stopping a batch of calls that is larger than the limit (for example
+`Async::Barrier#stop`) stops them one after the other, and each stopped call
+hands its turn to a queued one, which may open a connection before it is
+stopped too.
+
+A call made **inside a streaming block** (e.g. `get_object { |chunk| ... }`)
+to the same endpoint needs a second connection while the outer response still
+holds its own. If every connection is held by such an outer response, the
+nested calls can never start. Keep the limit above the number of concurrent
+streaming responses that make nested calls, or move the nested call out of
+the block. The same goes for a call made from a response listener
+(`on_headers`, `on_data`, `on_done`, `on_error` of the HTTP response): the
+outer call keeps its turn until its listeners have run.
+
+```ruby
+Aws.config[:async_http_connection_limit] = 100 # per reactor and endpoint
+```
+
+Before 0.1.1 the limit only applied when you injected a shared cache;
+otherwise every call got its own pool (and leaked it).
+
+### Cache injection
 
 ```ruby
   cache = Async::Aws::ClientCache.new
   client = Aws::DynamoDB::Client.new(async_http_client_cache: cache)
 ```
 
-Use cache injection only when you want to **control or share** the async‑http
-connection pool yourself. It caches **async‑http client instances** (connection
-pools), not AWS responses. **Most apps should ignore this** and let the gem
-manage its own internal cache. Inject a cache only when you need one of these:
+An injected cache replaces the default cache for that AWS client. It caches
+**async‑http client instances** (connection pools), not AWS responses. **Most
+apps should ignore this** and use the default cache. Inject a cache only when
+you need one of these:
 
 - **Deterministic shutdown** in tests or short‑lived scripts (so servers don’t
   hang waiting for pooled connections to drain).
-- **One shared pool across many AWS clients** to reduce sockets and improve
-  reuse.
+- **A separate pool** for some AWS clients, isolated from the rest of the
+  process.
 - **Custom lifecycle hooks** (e.g., you want to clear the pool on reload).
 
 If you inject a cache, call `clear!`/`close!` during shutdown to close pooled
-connections. For cross‑reactor apps, call it inside each reactor to ensure
-clients are closed on their owning reactor. Calling `clear!` outside any
-reactor will force‑close clients, which can interrupt in‑flight requests.
+connections; `Async::Aws::ClientCache.default.clear!` does the same for the
+default cache. `clear!` closes the clients of the reactor it is called in, plus
+those of reactors that have already finished. It never closes the clients of
+another running reactor (their sockets belong to that reactor's thread), so in
+cross‑reactor apps call it inside each reactor.
 
-The cache is capped by `async_http_max_cached_clients` using per‑reactor LRU
-eviction. Set it to `nil` or `0` to disable eviction.
+Without a timeout, `clear!` waits for the calling reactor's in‑flight requests.
+`clear!(timeout: 5)` waits up to 5 seconds in total, then closes their
+connections; those attempts fail with a networking error, which the SDK may
+retry on a new connection. A request that is still opening a direct
+connection when the timeout expires is not interrupted; its client is closed
+when it finishes. The same holds for a real request made while WebMock is
+enabled, if WebMock allows that request but not its endpoint as a whole
+(a path-specific `allow:`). `clear!` closes what exists at that moment: it does not stop later
+calls from opening new connections. Inside a request's own block (for example
+a streaming block), always pass a timeout: without one, `clear!` would wait
+for that very request.
 
 Cold‑start behavior: the cache is **not** gated. If multiple fibers hit a
 totally cold cache for the same endpoint at the same time, they may build
@@ -340,6 +472,23 @@ aggregate spikes.
 WebMock works for unit tests, but connection pooling can keep sockets open. Use
 `WebMock.disable_net_connect!(allow_localhost: true)` and isolate tests that
 rely on real IO.
+
+The default client cache is process‑wide, so it outlives a single example. An
+example that runs in its own `Sync { }` leaves no open connections behind,
+because its reactor ends with it. If your examples share one long‑lived
+reactor, call `Async::Aws::ClientCache.default.clear!` in an `after` hook; that
+also matters when WebMock is switched on or off between examples.
+
+To stub a network timeout, use WebMock's `to_timeout` (or
+`to_raise(IO::TimeoutError)`, `to_raise(Errno::ETIMEDOUT)`): the call fails with
+a `Seahorse::Client::NetworkingError` and is retried. `to_raise(Async::TimeoutError)`
+looks like a timeout you put around the call yourself, so it reaches your code
+as it is, without a retry.
+
+With WebMock enabled, a real (allowed) request through `http_proxy` waits
+forever: WebMock reads the body of the CONNECT request, which stays open for
+as long as the tunnel does. Use `WebMock.disable!` around examples that go
+through a real proxy.
 
 ### Docker integration tests
 
@@ -477,7 +626,7 @@ bin/ci
 Quick reference:
 
 ```bash
-VERSION=0.1.0
+VERSION=0.1.1
 
 # Build + push (after version bump + changelog)
 gem build aws-sdk-http-async.gemspec
@@ -501,7 +650,8 @@ gh release create "v${VERSION}" \
 
 - Ruby 3.4+
 - aws-sdk-core >= 3.241.0
-- async-http >= 0.94.0
+- async >= 2.46.0
+- async-http >= 0.105.0
 
 No backwards compatibility is maintained for older Ruby/AWS SDK versions.
 

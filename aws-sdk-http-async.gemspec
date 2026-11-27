@@ -12,7 +12,8 @@ Gem::Specification.new do |spec|
   spec.files = Dir['LICENSE.txt', 'CHANGELOG.md', 'README.md', 'VERSION', 'lib/**/*.rb', 'exe/*']
 
   spec.add_dependency('aws-sdk-core', '>= 3.241.0')
-  spec.add_dependency('async-http', '>= 0.94.0')
+  spec.add_dependency('async', '>= 2.46.0')
+  spec.add_dependency('async-http', '>= 0.105.0')
 
   spec.add_development_dependency('aws-sdk-dynamodb', '~> 1')
   spec.add_development_dependency('aws-sdk-s3', '~> 1')
